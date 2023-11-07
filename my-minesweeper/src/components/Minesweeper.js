@@ -1,115 +1,180 @@
-import { useState } from 'react';
+import React from "react";
+import {useState, useEffect } from 'react';
+import './minesweeper.css'
 
-function Square({ value, onSquareClick }) {
-  return (
-    <button className="square" onClick={onSquareClick}>
-      {value}
-    </button>
-  );
-}
 
-function Board({ xIsNext, squares, onPlay }) {
-  function handleClick(i) {
-    if (calculateWinner(squares) || squares[i]) {
-      return;
-    }
-    const nextSquares = squares.slice();
-    if (xIsNext) {
-      nextSquares[i] = 'X';
-    } else {
-      nextSquares[i] = 'O';
-    }
-    onPlay(nextSquares);
-  }
+const Minesweeper = () => {
+    const [grid, setGrid] = useState([]);
+    const [flagsLeft, setFlagsLeft] = useState(20); // Change the initial number of flags as needed
+    const [isGameOver, setIsGameOver] = useState(false);
+    const [result, setResult] = useState('');
+    const width = 10;
+    const bombAmount = 20;
+    const squares = [];
+    
+    useEffect(() => {
+      createBoard();
+    }, []);
+  
+    const createBoard = () => {
+      setFlagsLeft(bombAmount);
+      setIsGameOver(false);
+  
+      // Define and shuffle the game array
+      
+      const bombsArray = Array(bombAmount).fill('bomb');
+      const emptyArray = Array(width * width - bombAmount).fill('valid');
+      const gameArray = emptyArray.concat(bombsArray);
+      const shuffledArray = gameArray.sort(() => Math.random() - 0.5);
+  
+      for (let i = 0; i < width * width; i++) {
+        squares.push({
+          id: i,
+          status: shuffledArray[i],
+          isFlag: false,
+          isRevealed: false,
+        });
+      }
+  
+      setGrid([...squares]);
+    };
+  
+    // Add Flag with right click
+    const addFlag = (square) => {
+      if (isGameOver) return;
+      if (!square.isRevealed && flagsLeft > 0) {
+        const updatedGrid = [...grid];
+        const targetSquare = updatedGrid.find((s) => s.id === square.id);
+        if (!targetSquare.isFlag) {
+          targetSquare.isFlag = true;
+          setFlagsLeft(flagsLeft - 1);
+          checkForWin();
+        } else {
+          targetSquare.isFlag = false;
+          setFlagsLeft(flagsLeft + 1);
+        }
+        setGrid(updatedGrid);
+        checkForWin();
+      }
+    };
+  
+    // Click on square actions
+    const click = (square) => {
+      if (isGameOver) return;
+      if (square.isRevealed || square.isFlag) return;
+      if (square.status === 'bomb') {
+        gameOver(square);
+      } else {
+        const total = calculateTotal(square);
+        if (total !== 0) {
+          square.isRevealed = true;
+          square.total = total;
+        } else {
+          revealAdjacentSquares(square);
+        }
+        square.isRevealed = true;
+        const updatedGrid = [...grid];
+        setGrid(updatedGrid);
+        checkForWin();
+      }
+    };
+  
+    // Calculate the total number of adjacent bombs
+    const calculateTotal = (square) => {
+        const { id } = square;
+        const adjacentOffsets = [-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1];
+        let total = 0;
+    
+        adjacentOffsets.forEach((offset) => {
+          const neighborId = id + offset;
+          const neighborSquare = grid.find((s) => s.id === neighborId);
+          if (neighborSquare && neighborSquare.status === 'bomb') {
+            total++;
+          }
+        });
+        return total;
+    };
+  
+    // Recursive function to reveal adjacent squares with total 0
+    const revealAdjacentSquares = (square) => {
+        const { id } = square;
+        const adjacentOffsets = [-width - 1, -width, -width + 1, -1, 1, width - 1, width, width + 1];
+    
+        adjacentOffsets.forEach((offset) => {
+          const neighborId = id + offset;
+          const neighborSquare = grid.find((s) => s.id === neighborId);
+    
+          if (neighborSquare && !neighborSquare.isRevealed) {
+            const total = calculateTotal(neighborSquare);
+            neighborSquare.isRevealed = true;
+            neighborSquare.total = total;
+    
+            // If the revealed square has total 0, recursively reveal its neighbors
+            if (total === 0) {
+              revealAdjacentSquares(neighborSquare);
+            }
+          }
+        });
+    };
+  
+    // Game over
+    const gameOver = (square) => {
+      setResult('BOOM! Game Over!');
+      setIsGameOver(true);
+  
+      // Show ALL the bombs
+      const updatedGrid = [...grid];
+      updatedGrid.forEach((s) => {
+        if (s.status === 'bomb') {
+          s.isRevealed = true;
+        }
+      });
+      setGrid(updatedGrid);
+    };
+  
+    // Check for win
+    const checkForWin = () => {
+        let win = true;
 
-  const winner = calculateWinner(squares);
-  let status;
-  if (winner) {
-    status = 'Winner: ' + winner;
-  } else {
-    status = 'Next player: ' + (xIsNext ? 'X' : 'O');
-  }
-
-  return (
-    <>
-      <div className="status">{status}</div>
-      <div className="board-row">
-        <Square value={squares[0]} onSquareClick={() => handleClick(0)} />
-        <Square value={squares[1]} onSquareClick={() => handleClick(1)} />
-        <Square value={squares[2]} onSquareClick={() => handleClick(2)} />
-      </div>
-      <div className="board-row">
-        <Square value={squares[3]} onSquareClick={() => handleClick(3)} />
-        <Square value={squares[4]} onSquareClick={() => handleClick(4)} />
-        <Square value={squares[5]} onSquareClick={() => handleClick(5)} />
-      </div>
-      <div className="board-row">
-        <Square value={squares[6]} onSquareClick={() => handleClick(6)} />
-        <Square value={squares[7]} onSquareClick={() => handleClick(7)} />
-        <Square value={squares[8]} onSquareClick={() => handleClick(8)} />
-      </div>
-    </>
-  );
-}
-
-export default function Game() {
-  const [history, setHistory] = useState([Array(9).fill(null)]);
-  const [currentMove, setCurrentMove] = useState(0);
-  const xIsNext = currentMove % 2 === 0;
-  const currentSquares = history[currentMove];
-
-  function handlePlay(nextSquares) {
-    const nextHistory = [...history.slice(0, currentMove + 1), nextSquares];
-    setHistory(nextHistory);
-    setCurrentMove(nextHistory.length - 1);
-  }
-
-  function jumpTo(nextMove) {
-    setCurrentMove(nextMove);
-  }
-
-  const moves = history.map((squares, move) => {
-    let description;
-    if (move > 0) {
-      description = 'Go to move #' + move;
-    } else {
-      description = 'Go to game start';
-    }
+        grid.forEach((square) => {
+          if (square.status === 'bomb' && !square.isFlag) {
+            win = false;
+          }
+          if (square.status !== 'bomb' && !square.isRevealed) {
+            win = false;
+          }
+        });
+      
+        if (win) {
+          setResult('YOU WIN! Good Job!');
+          setIsGameOver(true);
+        }
+    };
+  
     return (
-      <li key={move}>
-        <button onClick={() => jumpTo(move)}>{description}</button>
-      </li>
+      <div className="minesweeper">
+        <div className="grid">
+          {grid.map((square) => (
+            <div
+              key={square.id}
+              className={`square ${square.isRevealed ? 'revealed' : ''}`}
+              onClick={() => click(square)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                addFlag(square);
+              }}
+            >
+              {square.isRevealed && square.status === 'bomb' ? '💣' : square.isRevealed && square.total ? square.total : ''}
+            </div>
+          ))}
+        </div>
+        <div className="status">
+          {isGameOver ? result : `Flags Left: ${flagsLeft}`}
+        </div>
+        <button onClick={createBoard}>Start New Game</button>
+      </div>
     );
-  });
-
-  return (
-    <div className="game">
-      <div className="game-board">
-        <Board xIsNext={xIsNext} squares={currentSquares} onPlay={handlePlay} />
-      </div>
-      <div className="game-info">
-        <ol>{moves}</ol>
-      </div>
-    </div>
-  );
-}
-
-function calculateWinner(squares) {
-  const lines = [
-    [0, 1, 2],
-    [3, 4, 5],
-    [6, 7, 8],
-    [0, 3, 6],
-    [1, 4, 7],
-    [2, 5, 8],
-    [0, 4, 8],
-    [2, 4, 6],
-  ];
-  for (let i = 0; i < lines.length; i++) {
-    const [a, b, c] = lines[i];
-    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-      return squares[a];
-    }
-  }
-  return null;
-}
+  };
+  
+  export default Minesweeper;
+  
